@@ -39,9 +39,11 @@ _start:
 sector_loop:
     movb $0x42, %ah
     int $0x13
-    jc disk_error
+    /*jc disk_error*/
+    jc read_floppy /* fallback to INT 13h 0x02 */
 
     addw $64, sector
+_ret_read_floppy:
     addw $0x8000, offset
     jnc sector_same_segment
 
@@ -123,9 +125,68 @@ enable_a20_wait1:
     jnc enable_a20_wait1
     ret
 
-disk_error:
-    movw $disk_error_str, %si
-    call print
+/*
+; read 64 segs beginning from LBA# [sector]
+; from floppy and store it at [segment]:[offset]
+; And Intel syntax still is >>> AT&T, so I shall
+; [at] you, jdah :D
+*/
+read_floppy:
+/*	; I will destroy a load of registers, save them */
+	pushw %ax
+	pushw %bx
+	pushw %cx
+	pushw %dx
+	pushw %es
+	pushw %di
+	
+	movw segment, %es
+	movw offset, %bx
+/*	; DI= no. of segments to read */
+	movw num_sectors, %di
+	
+_try_read:
+/*	; Calculate CHS address from LBA
+	; CHS: 80 Cylinders, each contain
+	; 2 Heads, with 18 Sectors each */
+	movw sector, %ax
+	movw $0, %dx
+	divw sectors_per_head
+/*	; DX=remainder=S in CHS */
+	movb %dl, %cl
+/*	; AX=quotient=Head count from the start of disk */
+	movw $0, %dx
+	divw heads_per_cyl /* this could be a shift-right also */
+	movb %dh, %ch
+	movb %dl, %dh
+	
+	movw %di, %ax
+	movb $2, %ah
+	movb drive_num, %dl
+	int $0x13
+	jnc _read_ok
+	
+	movw $disk_error_str, %si
+	call print
+/*	; Me rn: */
+	cli
+	hlt
+	
+_read_ok:
+/*	; who needs status codes? */
+	movb $0, %ah
+	addw %ax, sector
+	addw %ax, %bx
+	subw %ax, %di
+	jnz _try_read
+	
+	popw %di
+	popw %es
+	popw %dx
+	popw %cx
+	popw %bx
+	popw %ax
+	jmp _ret_read_floppy
 
 /* prints string in %ds:si */
 print:
@@ -165,6 +226,12 @@ segment:
     .word 0x0000
 sector:
     .quad 0x00000000
+
+/* CHS geometry */
+sectors_per_head:
+	.word 18
+heads_per_cyl:
+	.word 2
 
 /* GDT */
 .align 16
