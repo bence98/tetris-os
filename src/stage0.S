@@ -145,9 +145,9 @@ print:
 1:  ret
 
 welcome_str:
-    .asciz "TETRIS TIME\n"
+    .asciz "TETRIS TIME\r\n"
 disk_error_str:
-    .asciz "DISK ERROR\n"
+    .asciz "DISK ERROR\r\n"
 
 /* SAVED DRIVE NUMBER TO READ FROM */
 drive_num:
